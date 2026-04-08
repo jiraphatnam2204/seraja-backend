@@ -459,3 +459,59 @@ exports.checkOutBooking = async (req, res) => {
         });
     }
 };
+
+//@desc     Cancel booking
+//@route    PUT /api/v1/bookings/:id/cancel
+//@access   Private (admin, user, campOwner)
+exports.cancelBooking = async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: `No booking with id ${req.params.id}`
+            });
+        }
+
+        if (booking.status === 'cancelled') {
+            return res.status(400).json({
+                success: false,
+                message: 'Booking is already cancelled'
+            });
+        }
+
+        if (booking.status === 'checked-in' || booking.status === 'checked-out') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot cancel a booking that has already started or completed'
+            });
+        }
+
+        const camp = await Campground.findById(booking.campground);
+        const isCampOwner = camp && camp.owner.toString() === req.user.id;
+        const isOwner = booking.user && booking.user.toString() === req.user.id;
+
+        if (!isOwner && req.user.role !== 'admin' && !isCampOwner) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to cancel this booking'
+            });
+        }
+
+        booking.status = 'cancelled';
+        booking.cancelledAt = new Date();
+        await booking.save();
+
+        res.status(200).json({
+            success: true,
+            data: booking
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            success: false,
+            message: 'Cannot cancel booking'
+        });
+    }
+};

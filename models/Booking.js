@@ -54,6 +54,9 @@ const BookingSchema = new mongoose.Schema({
         enum: ['confirmed', 'checked-in', 'checked-out', 'cancelled'],
         default: 'confirmed'
     },
+    cancelledAt: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now
