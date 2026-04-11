@@ -8,7 +8,7 @@ Backend REST API for the Seraja campground booking platform. Built with Node.js,
 - **Framework**: Express
 - **Database**: MongoDB (via Mongoose)
 - **Auth**: JWT (stored in HTTP-only cookies)
-- **Deployment**: Vercel
+- **Deployment**: Railway
 
 ---
 
@@ -121,7 +121,9 @@ Server runs on `http://localhost:5000` by default.
 
 ## API Reference
 
-Base URL: `/api/v1`
+**Production base URL:** `https://seraja-backend-production-d4a4.up.railway.app/api/v1`
+
+**Local base URL:** `http://localhost:5000/api/v1`
 
 ### Authentication
 
