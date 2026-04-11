@@ -1,0 +1,894 @@
+openapi: 3.0.3
+info:
+  title: Seraja Campground API
+  version: 1.0.0
+  description: |
+    REST API for the Seraja campground booking platform.
+
+    **Rate limit:** 100 requests per 10 minutes per IP.
+
+    **Authentication:** All protected endpoints require a Bearer JWT token in the
+    `Authorization` header, or the `token` cookie set by the login/register
+    response.
+
+servers:
+  - url: /api/v1
+    description: Current server
+
+tags:
+  - name: Auth
+    description: Registration, login, and session management
+  - name: Campgrounds
+    description: Campground CRUD
+  - name: Bookings
+    description: Booking management, check-in/out, and export
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Security
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Schemas
+  # ──────────────────────────────────────────────────────────────────────────
+  schemas:
+
+    # ── User ─────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6627c1e8f2a3b4c5d6e7f8a9
+        name:
+          type: string
+          example: Alice Smith
+        tel:
+          type: string
+          example: "0812345678"
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        role:
+          type: string
+          enum: [user, admin, campOwner]
+          example: user
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Campground ────────────────────────────────────────────────────────────
+    Campground:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6627c2a0f2a3b4c5d6e7f8b1
+        name:
+          type: string
+          maxLength: 50
+          example: Pine Ridge Camp
+        address:
+          type: string
+          example: 123 Forest Road
+        district:
+          type: string
+          example: Mae Rim
+        province:
+          type: string
+          example: Chiang Mai
+        postalcode:
+          type: string
+          maxLength: 5
+          example: "50180"
+        tel:
+          type: string
+          example: "053123456"
+        region:
+          type: string
+          example: North
+        capacity:
+          type: integer
+          minimum: 1
+          default: 5
+          example: 10
+        owner:
+          type: string
+          description: User ID of the campground owner
+          example: 6627c1e8f2a3b4c5d6e7f8a9
+        bookings:
+          type: array
+          description: Virtual field — populated on GET requests
+          items:
+            $ref: '#/components/schemas/Booking'
+
+    CampgroundInput:
+      type: object
+      required: [name, address, district, province, postalcode, tel, region, owner]
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          example: Pine Ridge Camp
+        address:
+          type: string
+          example: 123 Forest Road
+        district:
+          type: string
+          example: Mae Rim
+        province:
+          type: string
+          example: Chiang Mai
+        postalcode:
+          type: string
+          maxLength: 5
+          example: "50180"
+        tel:
+          type: string
+          example: "053123456"
+        region:
+          type: string
+          example: North
+        capacity:
+          type: integer
+          minimum: 1
+          default: 5
+          example: 10
+        owner:
+          type: string
+          example: 6627c1e8f2a3b4c5d6e7f8a9
+
+    # ── Booking ───────────────────────────────────────────────────────────────
+    Booking:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 6627c3b0f2a3b4c5d6e7f8c2
+        checkInDate:
+          type: string
+          format: date
+          example: "2026-05-01"
+        checkOutDate:
+          type: string
+          format: date
+          example: "2026-05-03"
+        actualCheckIn:
+          type: string
+          format: date-time
+          nullable: true
+        actualCheckOut:
+          type: string
+          format: date-time
+          nullable: true
+        nightsCount:
+          type: integer
+          minimum: 1
+          maximum: 3
+          example: 2
+        user:
+          type: string
+          nullable: true
+          description: User ID — null for guest bookings
+          example: 6627c1e8f2a3b4c5d6e7f8a9
+        guestName:
+          type: string
+          nullable: true
+          description: Required for guest bookings (campOwner/admin only)
+          example: John Guest
+        guestTel:
+          type: string
+          nullable: true
+          example: "0898765432"
+        campground:
+          oneOf:
+            - type: string
+              description: Campground ID (when not populated)
+            - $ref: '#/components/schemas/Campground'
+        status:
+          type: string
+          enum: [confirmed, checked-in, checked-out, cancelled]
+          default: confirmed
+          example: confirmed
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    BookingInput:
+      type: object
+      required: [checkInDate, checkOutDate]
+      properties:
+        checkInDate:
+          type: string
+          format: date
+          example: "2026-05-01"
+        checkOutDate:
+          type: string
+          format: date
+          example: "2026-05-03"
+        guestName:
+          type: string
+          description: Required together with guestTel for a guest booking
+          example: John Guest
+        guestTel:
+          type: string
+          example: "0898765432"
+
+    # ── Common responses ──────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Error description
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Reusable responses
+  # ──────────────────────────────────────────────────────────────────────────
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated but not authorised for this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paths
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ════════════════════════════════ AUTH ═══════════════════════════════════
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, tel, email, password]
+              properties:
+                name:
+                  type: string
+                  example: Alice Smith
+                tel:
+                  type: string
+                  example: "0812345678"
+                email:
+                  type: string
+                  format: email
+                  example: alice@example.com
+                password:
+                  type: string
+                  minLength: 6
+                  format: password
+                  example: secret123
+                role:
+                  type: string
+                  enum: [user, admin, campOwner]
+                  default: user
+      responses:
+        "200":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alice@example.com
+                password:
+                  type: string
+                  format: password
+                  example: secret123
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current logged-in user
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    get:
+      tags: [Auth]
+      summary: Log out (clears the token cookie)
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════ CAMPGROUNDS ═════════════════════════════
+
+  /campgrounds:
+    get:
+      tags: [Campgrounds]
+      summary: List all campgrounds
+      description: |
+        Public endpoint. Supports advanced filtering, field selection, sorting,
+        and pagination via query parameters.
+
+        **Filtering:** any Campground field can be used as a filter. MongoDB
+        comparison operators are supported with the syntax
+        `?capacity[gte]=5`.
+
+        **Operators:** `gt`, `gte`, `lt`, `lte`, `in`
+      parameters:
+        - in: query
+          name: select
+          schema:
+            type: string
+          description: "Comma-separated fields to return (e.g. `name,province`)"
+        - in: query
+          name: sort
+          schema:
+            type: string
+          description: "Comma-separated sort fields. Prefix with `-` for descending (e.g. `-capacity,name`)"
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 25
+      responses:
+        "200":
+          description: List of campgrounds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Campground'
+
+    post:
+      tags: [Campgrounds]
+      summary: Create a campground
+      description: Requires `admin` role.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampgroundInput'
+      responses:
+        "201":
+          description: Campground created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Campground'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /campgrounds/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Campground MongoDB ObjectId
+
+    get:
+      tags: [Campgrounds]
+      summary: Get a single campground
+      responses:
+        "200":
+          description: Campground detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Campground'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+    put:
+      tags: [Campgrounds]
+      summary: Update a campground
+      description: Requires `admin` or `campOwner` (owner of this campground).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampgroundInput'
+      responses:
+        "200":
+          description: Campground updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Campground'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+    delete:
+      tags: [Campgrounds]
+      summary: Delete a campground
+      description: |
+        Requires `admin` role. Also deletes all bookings associated with the
+        campground.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Campground deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════ BOOKINGS ════════════════════════════════
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: List bookings (scoped by role)
+      description: |
+        - `admin` — all bookings
+        - `campOwner` — bookings for their campgrounds
+        - `user` — only their own bookings
+
+        Supports the same filtering, sorting, and field-selection query
+        parameters as `/campgrounds`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: select
+          schema:
+            type: string
+        - in: query
+          name: sort
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [confirmed, checked-in, checked-out, cancelled]
+          description: Filter by booking status
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Booking'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "500":
+          description: Server error
+
+  /bookings/export:
+    get:
+      tags: [Bookings]
+      summary: Export bookings as CSV
+      description: |
+        Requires `admin` or `campOwner` role.
+        - `admin` — exports all bookings
+        - `campOwner` — exports bookings for their campgrounds
+
+        Returns a CSV file download.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /bookings/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Booking MongoDB ObjectId
+
+    get:
+      tags: [Bookings]
+      summary: Get a single booking
+      description: |
+        Accessible by the booking owner, the campground owner, or `admin`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Booking detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Bookings]
+      summary: Update a booking
+      description: |
+        Accessible by the booking owner, the campground owner, or `admin`.
+        If updating dates, both `checkInDate` and `checkOutDate` must be
+        provided together. Capacity is re-checked on date changes.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingInput'
+      responses:
+        "200":
+          description: Booking updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Bookings]
+      summary: Delete a booking
+      description: Accessible by the booking owner, the campground owner, or `admin`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Booking deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{id}/cancel:
+    put:
+      tags: [Bookings]
+      summary: Cancel a booking
+      description: |
+        Accessible by the booking owner, the campground owner, or `admin`.
+        Cannot cancel a booking with status `checked-in` or `checked-out`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{id}/checkin:
+    put:
+      tags: [Bookings]
+      summary: Check in a guest
+      description: |
+        Requires `campOwner` role (owner of the booking's campground).
+        Hard limit: a campground may have at most **5** simultaneous
+        `checked-in` bookings.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Checked in successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{id}/checkout:
+    put:
+      tags: [Bookings]
+      summary: Check out a guest
+      description: |
+        Requires `campOwner` role (owner of the booking's campground).
+        The booking must already be checked in and the stay must have started.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Checked out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /campgrounds/{campgroundId}/bookings:
+    post:
+      tags: [Bookings]
+      summary: Create a booking for a campground
+      description: |
+        All authenticated roles can create a booking.
+
+        **Self-booking** (default): the booking is linked to the authenticated user.
+
+        **Guest booking** (`campOwner` / `admin` only): supply `guestName` and
+        `guestTel` in the request body. `user` is set to `null`.
+
+        **Constraints:**
+        - Stay must be 1–3 nights.
+        - Campground capacity must not be exceeded on any night of the stay.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: campgroundId
+          required: true
+          schema:
+            type: string
+          description: Campground MongoDB ObjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingInput'
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Booking'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
