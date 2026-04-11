@@ -19,7 +19,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "format": "prettier --write .",
-    "types:generate": "openapi-typescript openapi.yaml -o types/api.d.ts"
+    "gen:types": "openapi-typescript openapi.yaml -o types/generated.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
