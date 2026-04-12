@@ -9,6 +9,7 @@ const {
   checkInBooking,
   checkOutBooking,
   cancelBooking,
+  getTodayCheckouts,
 } = require("../controllers/bookings");
 
 const { protect, authorize } = require("../middleware/auth");
@@ -20,7 +21,11 @@ router
   .get(protect, getBookings)
   .post(protect, authorize("admin", "user", "campOwner"), addBooking);
 
+
 router.route("/export").get(protect, exportBookings);
+router
+  .route("/today-checkouts")
+  .get(protect, authorize("admin", "campOwner"), getTodayCheckouts);
 
 router
   .route("/:id")

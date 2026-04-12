@@ -617,3 +617,58 @@ exports.cancelBooking = async (req, res) => {
         });
     }
 };
+
+//@desc     Get today's expected check-outs
+//@route    GET /api/v1/bookings/today-checkouts
+//@access   Private (campOwner, admin)
+exports.getTodayCheckouts = async (req, res) => {
+    try {
+        if (req.user.role === 'user') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to access this resource'
+            });
+        }
+
+        // สร้าง date range สำหรับวันนี้ (00:00:00 ถึง 23:59:59)
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const endOfToday   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+        let query;
+
+        if (req.user.role === 'admin') {
+            // admin เห็นทุก campground
+            query = {
+                checkOutDate: { $gte: startOfToday, $lte: endOfToday },
+                status: 'checked-in'
+            };
+        } else {
+            // campOwner เห็นเฉพาะ campground ของตัวเอง
+            const ownedCampgrounds = await Campground.find({ owner: req.user.id }).select('_id');
+            const campgroundIds = ownedCampgrounds.map(c => c._id);
+
+            query = {
+                campground: { $in: campgroundIds },
+                checkOutDate: { $gte: startOfToday, $lte: endOfToday },
+                status: 'checked-in'
+            };
+        }
+
+        const bookings = await Booking.find(query).populate(POPULATE);
+
+        res.status(200).json({
+            success: true,
+            count: bookings.length,
+            date: now.toISOString().split('T')[0],
+            data: bookings
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            success: false,
+            message: 'Cannot fetch today checkouts'
+        });
+    }
+};
