@@ -37,6 +37,7 @@ app.use(mongoSanitize());
 app.use(helmet());
 app.use(xss());
 
+/*
 app.use(
   rateLimit({
     windowMs: 10 * 60 * 1000,
@@ -45,6 +46,7 @@ app.use(
     legacyHeaders: false,
   }),
 );
+*/
 
 app.use(hpp());
 app.use(cors());
