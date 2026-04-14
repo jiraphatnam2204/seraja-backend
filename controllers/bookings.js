@@ -126,11 +126,13 @@ exports.getBookings = async (req, res) => {
     if (req.user.role === "admin") {
       baseQuery = {};
     } else if (req.user.role === "campOwner") {
-      const owned = await Campground.find({ owner: req.user.id }).select("_id");
+      const owned = await Campground.find({ owner: req.user._id }).select(
+        "_id",
+      );
       const ids = owned.map((c) => c._id);
       baseQuery = { campground: { $in: ids } };
     } else {
-      baseQuery = { user: req.user.id };
+      baseQuery = { user: req.user._id };
     }
 
     //copy query params
@@ -179,10 +181,11 @@ exports.getBookings = async (req, res) => {
       data: bookings,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching bookings:", err.message, err);
     res.status(500).json({
       success: false,
       message: "Cannot find bookings",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -202,7 +205,9 @@ exports.exportBookings = async (req, res) => {
     if (req.user.role === "admin") {
       bookings = await Booking.find().populate(POPULATE);
     } else {
-      const owned = await Campground.find({ owner: req.user.id }).select("_id");
+      const owned = await Campground.find({ owner: req.user._id }).select(
+        "_id",
+      );
       const ids = owned.map((c) => c._id);
       bookings = await Booking.find({ campground: { $in: ids } }).populate(
         POPULATE,
@@ -266,8 +271,10 @@ exports.getBooking = async (req, res) => {
       });
 
     const camp = await Campground.findById(booking.campground);
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
-    const isOwner = booking.user && booking.user.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
+    const isOwner =
+      booking.user && booking.user.toString() === req.user._id.toString();
 
     if (!isOwner && req.user.role !== "admin" && !isCampOwner) {
       return res.status(401).json({
@@ -301,7 +308,7 @@ exports.addBooking = async (req, res) => {
       });
     }
 
-    const isCampOwner = campground.owner.toString() === req.user.id;
+    const isCampOwner = campground.owner.toString() === req.user._id.toString();
     const isAdmin = req.user.role === "admin";
 
     // Determine booking type
@@ -320,7 +327,7 @@ exports.addBooking = async (req, res) => {
       req.body.user = null; // no registered user
     } else {
       // Regular self-booking
-      req.body.user = req.user.id;
+      req.body.user = req.user._id;
     }
 
     // Validate dates
@@ -377,8 +384,10 @@ exports.updateBooking = async (req, res) => {
       });
 
     const camp = await Campground.findById(booking.campground);
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
-    const isOwner = booking.user && booking.user.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
+    const isOwner =
+      booking.user && booking.user.toString() === req.user._id.toString();
 
     if (!isOwner && req.user.role !== "admin" && !isCampOwner) {
       return res.status(401).json({
@@ -448,8 +457,10 @@ exports.deleteBooking = async (req, res) => {
       });
 
     const camp = await Campground.findById(booking.campground);
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
-    const isOwner = booking.user && booking.user.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
+    const isOwner =
+      booking.user && booking.user.toString() === req.user._id.toString();
 
     if (!isOwner && req.user.role !== "admin" && !isCampOwner) {
       return res.status(401).json({
@@ -489,7 +500,8 @@ exports.checkInBooking = async (req, res) => {
 
     const camp = await Campground.findById(booking.campground);
 
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
 
     // ไม่ใช่เจ้าของ camp
     if (!isCampOwner) {
@@ -587,7 +599,8 @@ exports.checkOutBooking = async (req, res) => {
 
     const camp = await Campground.findById(booking.campground);
 
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
 
     // ไม่มีสิทธิ์
     if (!isCampOwner) {
@@ -661,8 +674,10 @@ exports.cancelBooking = async (req, res) => {
     }
 
     const camp = await Campground.findById(booking.campground);
-    const isCampOwner = camp && camp.owner.toString() === req.user.id;
-    const isOwner = booking.user && booking.user.toString() === req.user.id;
+    const isCampOwner =
+      camp && camp.owner.toString() === req.user._id.toString();
+    const isOwner =
+      booking.user && booking.user.toString() === req.user._id.toString();
 
     if (!isOwner && req.user.role !== "admin" && !isCampOwner) {
       return res.status(403).json({
@@ -730,7 +745,7 @@ exports.getTodayCheckouts = async (req, res) => {
     } else {
       // campOwner เห็นเฉพาะ campground ของตัวเอง
       const ownedCampgrounds = await Campground.find({
-        owner: req.user.id,
+        owner: req.user._id,
       }).select("_id");
       const campgroundIds = ownedCampgrounds.map((c) => c._id);
 

@@ -19,7 +19,9 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "format": "prettier --write .",
-    "gen:types": "openapi-typescript openapi.yaml -o types/generated.ts"
+    "gen:types": "openapi-typescript openapi.yaml -o types/generated.ts",
+    "seed": "node seeds/seeder.js",
+    "seed:delete": "node seeds/deleteData.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
