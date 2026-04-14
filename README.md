@@ -1,251 +1,166 @@
-# Seraja Campground Booking API
+# SERaja Backend API
 
-Backend REST API for the Seraja campground booking platform. Built with Node.js, Express, and MongoDB.
+Express + MongoDB backend for authentication, campgrounds, and bookings.
 
 ## Tech Stack
 
-- **Runtime**: Node.js
-- **Framework**: Express
-- **Database**: MongoDB (via Mongoose)
-- **Auth**: JWT (stored in HTTP-only cookies)
-- **Deployment**: Railway
+- Node.js + Express (CommonJS)
+- MongoDB + Mongoose
+- JWT authentication
+- Swagger UI (`/api-docs`) from `openapi.yaml`
 
----
+## Project Structure
 
-## Data Models
-
-The three core Mongoose models and their relationships:
-
-```mermaid
-classDiagram
-    class User {
-        +ObjectId _id
-        +String name
-        +String tel
-        +String email
-        +String role
-        +String password
-        +String resetPasswordToken
-        +Date resetPasswordExpire
-        +Date createdAt
-        +getSignedJwtToken() String
-        +matchPassword(password) Boolean
-    }
-
-    class Campground {
-        +ObjectId _id
-        +String name
-        +String address
-        +String district
-        +String province
-        +String postalcode
-        +String tel
-        +String region
-        +Number capacity
-        +ObjectId owner
-    }
-
-    class Booking {
-        +ObjectId _id
-        +Date checkInDate
-        +Date checkOutDate
-        +Date actualCheckIn
-        +Date actualCheckOut
-        +Number nightsCount
-        +ObjectId user
-        +String guestName
-        +String guestTel
-        +ObjectId campground
-        +String status
-        +Date cancelledAt
-        +Date createdAt
-    }
-
-    User "1" --> "0..*" Campground : owns
-    User "1" --> "0..*" Booking : makes
-    Campground "1" --> "0..*" Booking : has
+```text
+.
+├─ config/
+├─ controllers/
+├─ middleware/
+├─ models/
+├─ routes/
+├─ seeds/
+├─ openapi.yaml
+└─ server.js
 ```
 
-**Notes:**
-- `User.password` is hashed via bcryptjs and excluded from query results (`select: false`)
-- `User.role` ∈ `{ user, campOwner, admin }`
-- `Booking.user` is nullable — a booking belongs to either a registered `User` **or** a walk-in guest (`guestName` + `guestTel`), never both
-- `Campground.bookings` is a virtual reverse-populate (not stored in the document)
+## Environment Variables
 
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js
-- MongoDB instance (local or Atlas)
-
-### Installation
-
-```bash
-npm install
-```
-
-### Environment Variables
-
-Create a `config/config.env` file:
+Create `config/config.env`:
 
 ```env
 NODE_ENV=development
 PORT=5000
-
-MONGO_URI=<your_mongodb_connection_string>
-
-JWT_SECRET=<your_jwt_secret>
+MONGO_URI=<your-mongodb-uri>
+JWT_SECRET=<your-jwt-secret>
 JWT_EXPIRE=30d
 JWT_COOKIE_EXPIRE=30
+CORS_ORIGIN=http://localhost:3000
 ```
 
-### Running
+## Installation and Run
 
 ```bash
-# Development (with nodemon)
+npm install
 npm run dev
+```
 
-# Production
+Production mode:
+
+```bash
 npm start
-
-# Format code with Prettier
-npm run format
 ```
 
-Server runs on `http://localhost:5000` by default.
+## Available Scripts
 
----
+- `npm run dev` Start with nodemon.
+- `npm start` Start with Node.
+- `npm run format` Format with Prettier.
+- `npm run gen:types` Generate TypeScript API types from `openapi.yaml` to `types/generated.ts`.
+- `npm run seed` Seed demo data.
+- `npm run seed:delete` Delete all data.
 
-## API Reference
+## API Base URL
 
-**Production base URL:** `https://seraja-backend-production-d4a4.up.railway.app/api/v1`
+- Local: `http://localhost:5000`
+- Base path: `/api/v1`
 
-**Local base URL:** `http://localhost:5000/api/v1`
+## API Documentation
 
-### Authentication
+- Swagger UI: `GET /api-docs`
+- OpenAPI file: `openapi.yaml`
 
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| POST | `/auth/register` | Public | Register a new user |
-| POST | `/auth/login` | Public | Login and receive JWT cookie |
-| GET | `/auth/me` | Private | Get current logged-in user |
-| GET | `/auth/logout` | Private | Logout and clear cookie |
+## Authentication
 
-#### Register / Login body
+- Login/register returns a JWT token.
+- For protected routes, send:
 
-```json
-{
-  "name": "string",
-  "email": "string",
-  "tel": "string",
-  "password": "string",
-  "role": "user | campOwner | admin"
-}
+```http
+Authorization: Bearer <token>
 ```
 
----
+Roles in the system:
+
+- `user`
+- `campOwner`
+- `admin`
+
+## Main Endpoints
+
+### Auth
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me` (protected)
+- `GET /api/v1/auth/logout` (protected)
 
 ### Campgrounds
 
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| GET | `/campgrounds` | Public | Get all campgrounds |
-| GET | `/campgrounds/:id` | Public | Get single campground |
-| POST | `/campgrounds` | admin | Create a campground |
-| PUT | `/campgrounds/:id` | admin, campOwner | Update a campground |
-| DELETE | `/campgrounds/:id` | admin | Delete a campground |
-
-#### Campground body
-
-```json
-{
-  "name": "string",
-  "address": "string",
-  "district": "string",
-  "province": "string",
-  "postalcode": "string (max 5 digits)",
-  "tel": "string",
-  "region": "string",
-  "capacity": "number (default: 5)",
-  "owner": "userId"
-}
-```
-
----
+- `GET /api/v1/campgrounds`
+- `GET /api/v1/campgrounds/:id`
+- `POST /api/v1/campgrounds` (admin)
+- `PUT /api/v1/campgrounds/:id` (admin or owner)
+- `DELETE /api/v1/campgrounds/:id` (admin)
 
 ### Bookings
 
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| GET | `/bookings` | Private | Get bookings (scoped by role) |
-| GET | `/bookings/export` | admin, campOwner | Export bookings as CSV |
-| GET | `/bookings/:id` | Private | Get single booking |
-| POST | `/campgrounds/:campgroundId/bookings` | admin, user, campOwner | Create a booking |
-| PUT | `/bookings/:id` | admin, user, campOwner | Update a booking |
-| DELETE | `/bookings/:id` | admin, user, campOwner | Delete a booking |
-| PUT | `/bookings/:id/cancel` | admin, user, campOwner | Cancel a booking |
-| PUT | `/bookings/:id/checkin` | campOwner | Check in a guest |
-| PUT | `/bookings/:id/checkout` | campOwner | Check out a guest |
+- `GET /api/v1/bookings` (protected, role-scoped data)
+- `GET /api/v1/bookings/:id` (protected)
+- `PUT /api/v1/bookings/:id` (protected)
+- `DELETE /api/v1/bookings/:id` (protected)
+- `PUT /api/v1/bookings/:id/cancel` (protected)
+- `PUT /api/v1/bookings/:id/checkin` (campOwner)
+- `PUT /api/v1/bookings/:id/checkout` (campOwner)
+- `GET /api/v1/bookings/export` (campOwner/admin, CSV)
+- `GET /api/v1/bookings/today-checkouts` (campOwner/admin)
+- `GET /api/v1/campgrounds/:campgroundId/bookings` (protected)
+- `POST /api/v1/campgrounds/:campgroundId/bookings` (protected)
 
-#### Booking body (registered user)
+Notes:
 
-```json
-{
-  "checkInDate": "YYYY-MM-DD",
-  "checkOutDate": "YYYY-MM-DD"
-}
+- Booking stay is limited to 1-3 nights.
+- Guest booking requires both `guestName` and `guestTel`, and only `campOwner` or `admin` can create guest bookings.
+- The route `POST /api/v1/bookings` exists in code but is effectively legacy; use the nested campground route for booking creation.
+
+## Query Features
+
+Some list endpoints support:
+
+- Field selection: `?select=name,province`
+- Sorting: `?sort=checkInDate,-createdAt`
+- Operator filters: `?capacity[gte]=10`
+
+## Seed Data
+
+Run:
+
+```bash
+npm run seed
 ```
 
-#### Booking body (walk-in guest, campOwner/admin only)
+Seed includes:
 
-```json
-{
-  "checkInDate": "YYYY-MM-DD",
-  "checkOutDate": "YYYY-MM-DD",
-  "guestName": "string",
-  "guestTel": "string"
-}
-```
+- 2 admins
+- 1 camp owner
+- 2 regular users
+- 10 campgrounds
+- 10 bookings across statuses (`confirmed`, `checked-in`, `checked-out`, `cancelled`)
 
----
+Sample seeded accounts:
 
-## Business Rules
+- `admin1@example.com` / `admin123`
+- `admin2@example.com` / `admin123`
+- `somchai.owner@example.com` / `password123`
+- `john.smith@example.com` / `password123`
+- `sarah.johnson@example.com` / `password123`
 
-- **Stay duration**: 1–3 nights per booking
-- **Capacity check**: Bookings are rejected if the campground is at full capacity for any night in the requested range
-- **Concurrent check-ins**: Maximum 5 simultaneous checked-in bookings per campground
-- **Booking scopes**:
-  - `user` — sees only their own bookings
-  - `campOwner` — sees bookings for their campgrounds
-  - `admin` — sees all bookings
-- **Cancellation**: Only allowed on `confirmed` bookings; checked-in or checked-out bookings cannot be cancelled
+## Security Middleware
 
-### Booking Status Flow
+Configured in `server.js`:
 
-```mermaid
-stateDiagram-v2
-    [*] --> confirmed : booking created
-    confirmed --> checkedIn : campOwner checks in guest
-    confirmed --> cancelled : user / admin cancels
-    checkedIn --> checkedOut : campOwner checks out guest
-    checkedOut --> [*]
-    cancelled --> [*]
+- `helmet`
+- `express-mongo-sanitize`
+- `express-xss-sanitizer`
+- `hpp`
+- `cors`
 
-    state "checked-in" as checkedIn
-    state "checked-out" as checkedOut
-```
-
----
-
-## Security
-
-- `helmet` — HTTP security headers
-- `express-mongo-sanitize` — NoSQL injection prevention
-- `express-xss-sanitizer` — XSS sanitization
-- `hpp` — HTTP parameter pollution prevention
-- `express-rate-limit` — 100 requests per 10 minutes per IP
-- `bcryptjs` — Password hashing
-- `cors` — Cross-origin resource sharing enabled
+`express-rate-limit` is currently present but commented out.
