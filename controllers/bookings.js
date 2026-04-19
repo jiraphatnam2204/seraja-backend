@@ -796,6 +796,7 @@ exports.getCampgroundReview = async (req, res) => {
     let query = Booking.find({
       campground: { $in: campgroundIds },
       review_rating: { $ne: null },
+      status: "reviewed",
     }).populate([
       {
         path: "campground",
