@@ -15,7 +15,8 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "dev": "nodemon server.js",
     "start": "node server.js",
     "format": "prettier --write .",
@@ -40,7 +41,23 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "controllers/campgrounds.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 100,
+        "branches": 100,
+        "functions": 100,
+        "lines": 100
+      }
+    }
+  },
   "devDependencies": {
+    "jest": "^30.0.5",
     "nodemon": "^3.1.14",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.2"
