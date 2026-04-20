@@ -414,10 +414,10 @@ const seedDatabase = async () => {
       {
         user: jamesSix,
         campground: campgrounds[6],
-        checkInOffset: -1,
+        checkInOffset: 0,
         checkOutOffset: 2,
-        actualCheckInOffset: -1,
-        status: "checked-in",
+        // actualCheckInOffset: -1,
+        status: "confirmed",
       },
       // 8. Random mix: cancelled guest booking
       {
