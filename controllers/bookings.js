@@ -39,7 +39,7 @@ async function autoUpdateBookingStatuses() {
     },
     {
       $set: {
-        status: "cancelled",
+        status: "checked-out",
         actualCheckOut: now,
       },
     },
@@ -397,7 +397,7 @@ exports.updateBooking = async (req, res) => {
     }
 
     // ป้องกันการแก้ไขถ้าเช็คอินไปแล้ว หรือจบการจองแล้ว หรือยกเลิกไปแล้ว
-    if (["checked-in", "checked-out", "cancelled"].includes(booking.status)) {
+    if (["checked-in", "checked-out", "cancelled", "reviewed", "can-not-review"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
         message: `Cannot update a booking that is ${booking.status}`,
@@ -470,7 +470,7 @@ exports.deleteBooking = async (req, res) => {
     }
 
     // ป้องกันการลบถ้าเช็คอินไปแล้ว หรือจบการจองแล้ว หรือยกเลิกไปแล้ว (เพื่อเก็บประวัติ)
-    if (["checked-in", "checked-out", "cancelled"].includes(booking.status)) {
+    if (["checked-in", "checked-out", "cancelled", "reviewed", "can-not-review"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
         message: `Cannot delete a booking that is ${booking.status}`,
@@ -519,6 +519,14 @@ exports.checkInBooking = async (req, res) => {
       });
     }
 
+    // ถ้า check-in ไปแล้ว
+    if (booking.actualCheckIn) {
+      return res.status(400).json({
+        success: false,
+        message: "This booking is already checked in",
+      });
+    }
+
     const checkedInCount = await Booking.countDocuments({
       campground: booking.campground,
       status: "checked-in",
@@ -529,14 +537,6 @@ exports.checkInBooking = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `This campground has reached the maximum check-in limit (${camp.capacity})`,
-      });
-    }
-
-    // ถ้า check-in ไปแล้ว
-    if (booking.actualCheckIn) {
-      return res.status(400).json({
-        success: false,
-        message: "This booking is already checked in",
       });
     }
 
@@ -665,7 +665,7 @@ exports.cancelBooking = async (req, res) => {
       });
     }
 
-    if (booking.status === "checked-in" || booking.status === "checked-out") {
+    if (["checked-in", "checked-out", "reviewed", "can-not-review"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
         message:
@@ -949,40 +949,24 @@ exports.updateReview = async (req, res) => {
     const { review_rating, review_comment } = req.body;
 
     if (req.user.role !== "user") {
-      return res.status(403).json({
-        success: false,
-        message: "Only users can update reviews",
-      });
+      return res.status(403).json({ success: false, message: "Only users can update reviews" });
     }
 
     const booking = await Booking.findById(req.params.id);
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: `No booking with id ${req.params.id}`,
-      });
+      return res.status(404).json({ success: false, message: `No booking with id ${req.params.id}` });
     }
 
     if (!booking.user || booking.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to update this review",
-      });
+      return res.status(403).json({ success: false, message: "Not authorized to update this review" });
     }
 
     if (booking.status !== "reviewed" || booking.review_isDeleted) {
-      return res.status(400).json({
-        success: false,
-        message: "No active review to update",
-      });
+      return res.status(400).json({ success: false, message: "No active review to update" });
     }
 
     if (!review_rating || review_rating < 1 || review_rating > 5) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating must be between 1 and 5",
-      });
+      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5" });
     }
 
     booking.review_rating = review_rating;
@@ -1003,30 +987,19 @@ exports.updateReview = async (req, res) => {
 exports.deleteReview = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
-
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: `No booking with id ${req.params.id}`,
-      });
+      return res.status(404).json({ success: false, message: `No booking with id ${req.params.id}` });
     }
 
-    const isOwner =
-      booking.user && booking.user.toString() === req.user._id.toString();
+    const isOwner = booking.user && booking.user.toString() === req.user._id.toString();
     const isAdmin = req.user.role === "admin";
 
     if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to delete this review",
-      });
+      return res.status(403).json({ success: false, message: "Not authorized to delete this review" });
     }
 
     if (booking.status !== "reviewed" || booking.review_isDeleted) {
-      return res.status(400).json({
-        success: false,
-        message: "No active review to delete",
-      });
+      return res.status(400).json({ success: false, message: "No active review to delete" });
     }
 
     booking.review_isDeleted = true;
