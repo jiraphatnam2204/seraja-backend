@@ -868,13 +868,83 @@ exports.getCampgroundReview = async (req, res) => {
   }
 };
 
-//@desc     create review booking
-//@route    Put /api/v1/bookings/createReview
+//@desc     Create review for booking
+//@route    PUT /api/v1/bookings/:id/review
 //@access   Private (User)
 exports.createReview = async (req, res) => {
-  //ให้ user ที่มีstatus check out เพิ่ม review เข้า booking เเล้วเปลี่ยน status เป็น reviewed
-  //(ที่ใช่เป็นput เพราะเรามีตัวbooking อยู่เเล้ว)
-}
+  try {
+    const { review_rating, review_comment } = req.body;
+
+    // ต้องเป็น user เท่านั้น
+    if (req.user.role !== "user") {
+      return res.status(403).json({
+        success: false,
+        message: "Only users can create reviews",
+      });
+    }
+
+    // หา booking
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: `No booking with id ${req.params.id}`,
+      });
+    }
+
+    // ต้องเป็นเจ้าของ booking
+    if (!booking.user || booking.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to review this booking",
+      });
+    }
+
+    // ต้อง check-out แล้วเท่านั้น
+    if (booking.status !== "checked-out") {
+      return res.status(400).json({
+        success: false,
+        message: "You can only review after check-out",
+      });
+    }
+
+    // ห้าม review ซ้ำ
+    if (booking.review_rating !== null) {
+      return res.status(400).json({
+        success: false,
+        message: "This booking has already been reviewed",
+      });
+    }
+
+    // validate rating
+    if (!review_rating || review_rating < 1 || review_rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    // update review
+    booking.review_rating = review_rating;
+    booking.review_comment = review_comment || null;
+    booking.review_createdAt = new Date();
+    booking.status = "reviewed";
+
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      data: booking,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Cannot create review",
+    });
+  }
+};
 
 //@desc     update review booking
 //@route    Put /api/v1/bookings/updateReview
