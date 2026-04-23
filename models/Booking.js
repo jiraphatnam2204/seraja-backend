@@ -101,4 +101,48 @@ BookingSchema.pre('save', async function () {
     }
 });
 
+BookingSchema.statics.calculateAverageRating = async function (campgroundId) {
+    const result = await this.aggregate([
+        {
+            $match: {
+                campground: campgroundId,
+                review_rating: { $ne: null },
+                review_isDeleted: false
+            }
+        },
+        {
+            $group: {
+                _id: '$campground',
+                avgRating: { $avg: '$review_rating' },
+                count: { $sum: 1 }
+            }
+        }
+    ]);
+
+    try {
+        await mongoose.model('Campground').findByIdAndUpdate(campgroundId, {
+            averageRating: result[0]?.avgRating || null,
+            ratingsCount: result[0]?.count || 0
+        });
+    } catch (err) {
+        console.error(err);
+    }
+};
+
+BookingSchema.post('save', function () {
+    this.constructor.calculateAverageRating(this.campground);
+});
+
+BookingSchema.post('findOneAndUpdate', async function (doc) {
+    if (doc) {
+        await doc.constructor.calculateAverageRating(doc.campground);
+    }
+});
+
+BookingSchema.post('findOneAndDelete', async function (doc) {
+    if (doc) {
+        await doc.constructor.calculateAverageRating(doc.campground);
+    }
+});
+
 module.exports = mongoose.model('Booking', BookingSchema);
