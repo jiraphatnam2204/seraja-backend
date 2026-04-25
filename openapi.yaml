@@ -9,6 +9,8 @@ info:
     - Most protected endpoints require `Authorization: Bearer <jwt>`.
     - Swagger UI is served at `/api-docs`.
 servers:
+  - url: https://seraja-backend-production-d4a4.up.railway.app
+    description: Production (Railway)
   - url: http://localhost:5000
     description: Local development
 
@@ -16,6 +18,7 @@ tags:
   - name: Auth
   - name: Campgrounds
   - name: Bookings
+  - name: Reviews
 
 components:
   securitySchemes:
@@ -159,7 +162,13 @@ components:
             - $ref: "#/components/schemas/Campground"
         status:
           type: string
-          enum: [confirmed, checked-in, checked-out, cancelled]
+          enum:
+            - confirmed
+            - checked-in
+            - checked-out
+            - cancelled
+            - reviewed
+            - can-not-review
           default: confirmed
         cancelledAt:
           type: string
@@ -168,6 +177,23 @@ components:
         createdAt:
           type: string
           format: date-time
+        review_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          example: 5
+        review_comment:
+          type: string
+          nullable: true
+          example: Great campground, would visit again.
+        review_createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        review_isDeleted:
+          type: boolean
+          default: false
 
     RegisterRequest:
       type: object
@@ -266,7 +292,45 @@ components:
           nullable: true
         status:
           type: string
-          enum: [confirmed, checked-in, checked-out, cancelled]
+          enum:
+            - confirmed
+            - checked-in
+            - checked-out
+            - cancelled
+            - reviewed
+            - can-not-review
+
+    ReviewUpsertRequest:
+      type: object
+      required: [review_rating]
+      properties:
+        review_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        review_comment:
+          type: string
+          nullable: true
+          example: Loved the lakeside view.
+
+    ReviewListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 3
+        averageRating:
+          type: number
+          format: float
+          example: 4.67
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
 
     TokenResponse:
       type: object
@@ -622,6 +686,40 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Not admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/campgrounds/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: List reviews for a campground
+      description: |
+        Returns active reviews (status `reviewed` and `review_isDeleted` not true) for the given campground,
+        plus the computed `averageRating`. Supports `sort` and Mongo operator filters
+        (e.g. `?review_rating[gte]=4`). Default sort is `-review_createdAt` (newest first).
+      parameters:
+        - $ref: "#/components/parameters/CampgroundEntityIdParam"
+        - name: sort
+          in: query
+          schema:
+            type: string
+          description: Comma-separated sort fields (e.g. `-review_createdAt`).
+        - name: review_rating
+          in: query
+          schema:
+            type: object
+          description: Operator filter, e.g. `?review_rating[gte]=4`.
+      responses:
+        "200":
+          description: Review list with average rating.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewListResponse"
+        "500":
+          description: Server error.
           content:
             application/json:
               schema:
@@ -1004,6 +1102,147 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/bookings/{id}/review:
+    put:
+      tags: [Reviews]
+      summary: Create a review for a booking
+      description: |
+        User role only. Booking must be owned by the caller and have status `checked-out`.
+        After success the booking status becomes `reviewed`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BookingIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewUpsertRequest"
+      responses:
+        "200":
+          description: Review created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDataResponse"
+        "400":
+          description: Not yet checked-out, already reviewed, or invalid rating.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the booking owner, not a `user`, or booking is blocked from reviewing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Reviews]
+      summary: Delete a booking review (soft delete)
+      description: |
+        Soft-delete a review. Behavior depends on the caller:
+        - **user (booking owner)**: clears the review and resets status to `checked-out` so the user can re-review.
+        - **admin**: marks the booking `can-not-review`, permanently blocking further reviews.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BookingIdParam"
+      responses:
+        "200":
+          description: Review deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDataResponse"
+        "400":
+          description: No active review on this booking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the booking owner and not an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/bookings/{id}/review/update:
+    put:
+      tags: [Reviews]
+      summary: Update an existing booking review
+      description: |
+        User role only. Booking must be owned by the caller and currently have status `reviewed`
+        with `review_isDeleted` not true.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BookingIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewUpsertRequest"
+      responses:
+        "200":
+          description: Review updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDataResponse"
+        "400":
+          description: No active review to update or invalid rating.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the booking owner or not a `user`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error.
           content:
             application/json:
               schema:
