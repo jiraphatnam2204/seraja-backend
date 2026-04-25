@@ -21,6 +21,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --runInBand",
+    "test:submit": "jest __tests__/controllers/bookings.test.js --coverage --collectCoverageFrom=controllers/bookings.js --coverageThreshold={}",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gen:types": "openapi-typescript openapi.yaml -o types/generated.ts",
